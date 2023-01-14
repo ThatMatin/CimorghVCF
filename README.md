@@ -14,7 +14,7 @@ CimorghVCF create -i INPUT_DIR -o OUTPUT_DIR -u DATABASE_NAME
 ```
 With materialized fields:
 ```
-CimorghVCF create -i INPUT_DIR -o OUTPUT_DIR -u DATABASE_NAME
+CimorghVCF create -i INPUT_DIR -o OUTPUT_DIR -u DATABASE_NAME -- -a info_AA
 ```
 ## Ingest samples into the database
 ```
