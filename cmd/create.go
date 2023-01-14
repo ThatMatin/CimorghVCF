@@ -1,8 +1,6 @@
 package cmd 
 
 import (
-    "github.com/ThatMatin/CimorghVCF/app"
-
     "github.com/spf13/cobra"
 )
 
@@ -13,20 +11,7 @@ var createCmd = &cobra.Command{
 }
 
 func createDataset(cmd *cobra.Command, args []string) {
-    validateFlags()
-    commands := prepCreate(args)
-    App := app.NewApp(
-        app.TILEDB_CLI_IMAGE_REF,
-        inputDir,
-        outputDir,
-        datasetURI,
-    )
-
-    App.PullImage()
-    App.CreateContainerWithCommand("cimorghCont",commands)
-    App.StartContainer()
-    App.ContainerLogsToStdout()
-    App.RemoveContainer()
+    containerCycle(args, prepCreate)
 }
 
 func prepCreate(args []string) []string {

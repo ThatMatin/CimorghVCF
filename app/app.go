@@ -1,14 +1,15 @@
 package app
 
 import (
-    "fmt"
 	"context"
+	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/sirupsen/logrus"
@@ -42,8 +43,7 @@ type App struct {
 // defer cli.Close()
 // TODO: remember to close client
 func NewApp(imageRef ,inputDir, outputDir, datasetURI string) *App {
-    fmt.Print(ASCII_ART)
-    initLogs()
+    fmt.Fprint(os.Stderr,ASCII_ART)
     cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
     if err != nil {
         logrus.Fatalf("error creating client: %v\n", err)
@@ -74,7 +74,7 @@ func (a *App) StartContainer() error {
             return err
         }
     case resp := <- statusCh:
-        logrus.Infof("container returned with status code: %d\n", resp.StatusCode)
+        logrus.Debugf("container returned with status code: %d\n", resp.StatusCode)
     }
 
     return nil
@@ -86,7 +86,7 @@ func (a *App) RemoveContainer() error {
         logrus.Warnf("couldn't remove container: %v", err)
         return err
     }
-    logrus.Infof("removed container with ID: %v",a.containerID)
+    logrus.Debugf("removed container with ID: %v",a.containerID)
     return nil
 }
 
@@ -123,7 +123,6 @@ func (a *App) CreateContainerWithCommand(name string, commands []string) error {
             },
         },
     }
-    logrus.Debug(commands)
 
     containerConfig := &container.Config{
         Image: a.ImageRef,
@@ -138,7 +137,7 @@ func (a *App) CreateContainerWithCommand(name string, commands []string) error {
         logrus.Errorf("error creating container: %v\n", err)
         return err
     }
-    logrus.Infof("Created container: %s\n", resp.ID)
+    logrus.Debugf("Created container: %s\n", resp.ID)
     a.containerID = resp.ID
 
     return nil
@@ -170,7 +169,7 @@ func (a *App) CheckImageExists(imageTag string) bool {
     }
     for _, image := range imgList {
         if image.RepoTags[0] == imageTag {
-            logrus.Info("Image exists locally")
+            logrus.Debug("Image exists locally")
 
             return true
         }
@@ -179,11 +178,17 @@ func (a *App) CheckImageExists(imageTag string) bool {
     return false
 }
 
-func (a *App) ShutdownApp() error {
-    return a.cli.Close()
+func (a *App) StopContainer() error {
+    ctx := context.Background()
+    timeout := time.Second * 5
+    if err := a.cli.ContainerStop(ctx, a.containerID, &timeout); err != nil {
+        logrus.Errorf("couldn't stop the container gracefully. Killing it: %v\n", err)
+        return err
+    }
+
+    return nil
 }
 
-func initLogs() {
-    logrus.SetOutput(os.Stdout)
-    logrus.SetLevel(logrus.DebugLevel)
+func (a *App) ShutdownApp() error {
+    return a.cli.Close()
 }

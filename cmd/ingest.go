@@ -1,8 +1,6 @@
 package cmd
 
 import (
-    "github.com/ThatMatin/CimorghVCF/app"
-
     "github.com/spf13/cobra"
 )
 
@@ -21,20 +19,7 @@ func init() {
 }
 
 func ingestSamples(cmd *cobra.Command, args []string) {
-    validateFlags()
-    command := prepIngest(args)
-    App := app.NewApp(
-        app.TILEDB_CLI_IMAGE_REF,
-        inputDir,
-        outputDir,
-        datasetURI,
-    )
-
-    App.PullImage()
-    App.CreateContainerWithCommand("cimorghCont",command)
-    App.StartContainer()
-    App.ContainerLogsToStdout()
-    App.RemoveContainer()
+    containerCycle(args, prepIngest)
 }
 
 func prepIngest(args []string) []string {
