@@ -1,13 +1,15 @@
 package app
 
 import (
-    "fmt"
 	"context"
+	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/sirupsen/logrus"
@@ -32,14 +34,16 @@ const (
 type App struct {
     cli *client.Client
     containerID string
+    inputDir string
+    outputDir string
+    datasetURI string
     ImageRef string
 }
 
 // defer cli.Close()
 // TODO: remember to close client
-func NewApp(imageRef string) *App {
-    fmt.Print(ASCII_ART)
-    initLogs()
+func NewApp(imageRef ,inputDir, outputDir, datasetURI string) *App {
+    fmt.Fprint(os.Stderr,ASCII_ART)
     cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
     if err != nil {
         logrus.Fatalf("error creating client: %v\n", err)
@@ -47,12 +51,15 @@ func NewApp(imageRef string) *App {
     app := &App{
         cli: cli,
         ImageRef: imageRef,
+        inputDir: inputDir,
+        outputDir: outputDir,
+        datasetURI: datasetURI,
     }
 
     return app
 }
 
-func (a *App) StartContainer(removeAfter bool) error {
+func (a *App) StartContainer() error {
     ctx := context.Background()
     if err := a.cli.ContainerStart(ctx, a.containerID, types.ContainerStartOptions{}); err != nil {
         logrus.Errorf("error starting container: %v\n", err)
@@ -67,13 +74,7 @@ func (a *App) StartContainer(removeAfter bool) error {
             return err
         }
     case resp := <- statusCh:
-        logrus.Infof("container returned with status code: %d\n", resp.StatusCode)
-    }
-
-    if removeAfter {
-        if err := a.RemoveContainer(); err != nil {
-            return err
-        }
+        logrus.Debugf("container returned with status code: %d\n", resp.StatusCode)
     }
 
     return nil
@@ -85,7 +86,7 @@ func (a *App) RemoveContainer() error {
         logrus.Warnf("couldn't remove container: %v", err)
         return err
     }
-    logrus.Infof("removed container with ID: %v",a.containerID)
+    logrus.Debugf("removed container with ID: %v",a.containerID)
     return nil
 }
 
@@ -108,16 +109,37 @@ func (a *App) ContainerLogsToStdout() error {
 
 func (a *App) CreateContainerWithCommand(name string, commands []string) error {
     ctx := context.Background()
-    resp, err := a.cli.ContainerCreate(ctx, &container.Config{
+    hostConfig := &container.HostConfig{
+        Mounts: []mount.Mount{
+            {
+                Type: mount.TypeBind,
+                Source: a.inputDir,
+                Target: a.inputDir,
+            },
+            {
+                Type: mount.TypeBind,
+                Source: a.outputDir,
+                Target: a.outputDir,
+            },
+        },
+    }
+
+    containerConfig := &container.Config{
         Image: a.ImageRef,
         Cmd: commands,
-    }, nil,nil,nil, name)
+        WorkingDir: a.outputDir,
+        AttachStdout: true,
+        AttachStderr: true,
+    }
+
+    resp, err := a.cli.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, name)
     if err != nil {
         logrus.Errorf("error creating container: %v\n", err)
         return err
     }
-    logrus.Infof("Created container: %s\n", resp.ID)
+    logrus.Debugf("Created container: %s\n", resp.ID)
     a.containerID = resp.ID
+
     return nil
 } 
 
@@ -147,7 +169,7 @@ func (a *App) CheckImageExists(imageTag string) bool {
     }
     for _, image := range imgList {
         if image.RepoTags[0] == imageTag {
-            logrus.Info("Image exists locally")
+            logrus.Debug("Image exists locally")
 
             return true
         }
@@ -156,11 +178,17 @@ func (a *App) CheckImageExists(imageTag string) bool {
     return false
 }
 
-func (a *App) ShutdownApp() error {
-    return a.cli.Close()
+func (a *App) StopContainer() error {
+    ctx := context.Background()
+    timeout := time.Second * 5
+    if err := a.cli.ContainerStop(ctx, a.containerID, &timeout); err != nil {
+        logrus.Errorf("couldn't stop the container gracefully. Killing it: %v\n", err)
+        return err
+    }
+
+    return nil
 }
 
-func initLogs() {
-    logrus.SetOutput(os.Stdout)
-    logrus.SetLevel(logrus.DebugLevel)
+func (a *App) ShutdownApp() error {
+    return a.cli.Close()
 }
