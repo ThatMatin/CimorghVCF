@@ -30,7 +30,7 @@ list the names of samples ingested into the database.
 ```
 CimorghVCF samples -i INPUT_DIR -o OUTPUT_DIR -u DATABASE_NAME
 ```
-## Export (vcf,bcf,vcf.gz,gvcf)
+## Export (vcf,bcf,vcf.gz,gvcf,tsv)
 To get full help about all the options related to this command pass the `--help` after `--`:
 ```
 CimorghVCF export -i INPUT_DIR -o OUTPUT_DIR -u DATABASE_NAME -- --help
